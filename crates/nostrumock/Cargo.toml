@@ -1,0 +1,13 @@
+[package]
+name = "nostrumock"
+version = "0.1.0"
+edition = "2021"
+description = "Rich TDD experience for Rust"
+categories = []
+keywords = []
+license = "MIT OR Apache-2.0"
+readme = "../../README.md"
+repository = "https://github.com/ryo33/nostrum"
+
+[dependencies]
+nostrumock-macros = { version = "0.1.0", path = "../nostrumock-macros" }
