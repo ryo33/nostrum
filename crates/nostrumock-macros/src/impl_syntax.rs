@@ -24,3 +24,23 @@ impl Parse for ImplMock {
         })
     }
 }
+
+impl ImplMock {
+    pub(crate) fn trait_name(&self) -> &syn::Ident {
+        &self
+            .trait_
+            .segments
+            .last()
+            .expect("not empty trait path")
+            .ident
+    }
+    pub(crate) fn methods(&self) -> impl Iterator<Item = &syn::ImplItemFn> {
+        self.item_impl.items.iter().filter_map(|item| match item {
+            syn::ImplItem::Fn(method) => Some(method),
+            _ => None,
+        })
+    }
+    pub(crate) fn target(&self) -> &syn::Type {
+        self.item_impl.self_ty.as_ref()
+    }
+}
