@@ -6,7 +6,7 @@ use crate::{attr_syntax::LetMock, impl_syntax::ImplMock};
 pub(crate) fn generate(attr: &LetMock, mock: &ImplMock) -> TokenStream {
     let trait_ = &mock.trait_;
     let struct_name = mock.struct_name(attr);
-    let lifetime = quote!('__narrative_state);
+    let lifetime = quote!('__nostrumock_state);
     let generics = mock.methods().map(|method| {
         let method_ident = &method.sig.ident;
         let closure_type = crate::closure_type::generate(mock.target(), method);
@@ -22,13 +22,28 @@ pub(crate) fn generate(attr: &LetMock, mock: &ImplMock) -> TokenStream {
     });
     let methods = mock.methods().map(|method| {
         let method_ident = &method.sig.ident;
+        let receiver = method.sig.receiver();
+        let args = method
+            .sig
+            .inputs
+            .iter()
+            .filter_map(|arg| {
+                let syn::FnArg::Typed(pat_type) = arg else {
+                    return None;
+                };
+                Some(pat_type)
+            })
+            .collect::<Vec<_>>();
+        let arg_pats = args.iter().map(|arg| &arg.pat);
+        let output = &method.sig.output;
         quote! {
-            fn #method_ident(&self) -> String {
-                self.#method_ident.lock().unwrap()(self.__narrative_state)
+            fn #method_ident(#receiver #(,#args)*) #output {
+                self.#method_ident.lock().unwrap()(self.__nostrumock_state #(,#arg_pats)*)
             }
         }
     });
     quote! {
+        #[allow(non_camel_case_types)]
         impl <
             #lifetime,
             #(#generics)*
@@ -54,9 +69,10 @@ mod tests {
         };
         let actual = generate(&attr, &input);
         let expected = quote! {
+            #[allow(non_camel_case_types)]
             impl <
-                '__narrative_state,
-            > Something for my_mock__Something<'__narrative_state> {
+                '__nostrumock_state,
+            > Something for my_mock__Something<'__nostrumock_state> {
             }
         };
         assert_eq!(actual.to_string(), expected.to_string());
@@ -76,15 +92,97 @@ mod tests {
         };
         let actual = generate(&attr, &input);
         let expected = quote! {
+            #[allow(non_camel_case_types)]
             impl <
-                '__narrative_state,
+                '__nostrumock_state,
                 meow: FnMut(&Cat) -> String,
-            > Something for my_mock__Something<'__narrative_state, meow> {
+            > Something for my_mock__Something<'__nostrumock_state, meow> {
                 fn meow(&self) -> String {
-                    self.meow.lock().unwrap()(self.__narrative_state)
+                    self.meow.lock().unwrap()(self.__nostrumock_state)
                 }
             }
         };
         assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn method_args() {
+        let attr = parse_quote! {
+            let my_mock = Cat
+        };
+        let input = parse_quote! {
+            impl Something for Cat {
+                fn meow(&self, volume: u8, count: usize) -> String {
+                    "meow".to_string()
+                }
+            }
+        };
+        let actual = generate(&attr, &input);
+        let expected = quote! {
+            #[allow(non_camel_case_types)]
+            impl <
+                '__nostrumock_state,
+                meow: FnMut(&Cat, u8, usize) -> String,
+            > Something for my_mock__Something<'__nostrumock_state, meow> {
+                fn meow(&self, volume: u8, count: usize) -> String {
+                    self.meow.lock().unwrap()(self.__nostrumock_state, volume, count)
+                }
+            }
+        };
+        assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn receiver_mut() {
+        let attr = parse_quote! {
+            let my_mock = Cat
+        };
+        let input = parse_quote! {
+            impl Something for Cat {
+                fn meow(&mut self) -> String {
+                    "meow".to_string()
+                }
+            }
+        };
+        let actual = generate(&attr, &input);
+        let expected = quote! {
+            #[allow(non_camel_case_types)]
+            impl <
+                '__nostrumock_state,
+                meow: FnMut(&mut Cat) -> String,
+            > Something for my_mock__Something<'__nostrumock_state, meow> {
+                fn meow(&mut self) -> String {
+                    self.meow.lock().unwrap()(self.__nostrumock_state)
+                }
+            }
+        };
+        assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn no_output() {
+        let attr = parse_quote! {
+            let my_mock = Cat
+        };
+        let input = parse_quote! {
+            impl Something for Cat {
+                fn meow(&self) {
+                    "meow".to_string()
+                }
+            }
+        };
+        let actual = generate(&attr, &input);
+        let expected = quote! {
+            #[allow(non_camel_case_types)]
+            impl <
+                '__nostrumock_state,
+                meow: FnMut(&Cat),
+            > Something for my_mock__Something<'__nostrumock_state, meow> {
+                fn meow(&self) {
+                    self.meow.lock().unwrap()(self.__nostrumock_state)
+                }
+            }
+        };
+        assert_eq!(actual.to_string(), expected.to_string())
     }
 }

@@ -6,8 +6,8 @@ use crate::{attr_syntax::LetMock, impl_syntax::ImplMock};
 pub(crate) fn generate(attr: &LetMock, input: &ImplMock) -> TokenStream {
     let target = input.target();
     let ident = input.struct_name(attr);
-    let state_ident = format_ident!("__narrative_state");
-    let state_lifetime = quote!('__narrative_state);
+    let state_ident = format_ident!("__nostrumock_state");
+    let state_lifetime = quote!('__nostrumock_state);
     let generics = input.methods().map(|method| {
         let method_ident = &method.sig.ident;
         let closure_type = crate::closure_type::generate(target, method);
@@ -18,7 +18,7 @@ pub(crate) fn generate(attr: &LetMock, input: &ImplMock) -> TokenStream {
     let fields = input.methods().map(|method| {
         let method_ident = &method.sig.ident;
         quote! {
-            #method_ident: #method_ident,
+            #method_ident: std::sync::Mutex<&#state_lifetime mut #method_ident>,
         }
     });
     quote! {
@@ -52,9 +52,9 @@ mod tests {
         let expected = quote! {
             #[allow(non_camel_case_types)]
             struct my_mock__Something<
-                '__narrative_state,
+                '__nostrumock_state,
             > {
-                __narrative_state: &'__narrative_state mut Cat,
+                __nostrumock_state: &'__nostrumock_state mut Cat,
             }
         };
         assert_eq!(actual.to_string(), expected.to_string());
@@ -79,13 +79,13 @@ mod tests {
         let expected = quote! {
             #[allow(non_camel_case_types)]
             struct my_mock__Something<
-                '__narrative_state,
+                '__nostrumock_state,
                 meow: FnMut(&Cat) -> String,
                 change_name: FnMut(&mut Cat, String),
             > {
-                __narrative_state: &'__narrative_state mut Cat,
-                meow: meow,
-                change_name: change_name,
+                __nostrumock_state: &'__nostrumock_state mut Cat,
+                meow: std::sync::Mutex<&'__nostrumock_state mut meow>,
+                change_name: std::sync::Mutex<&'__nostrumock_state mut change_name>,
             }
         };
         assert_eq!(actual.to_string(), expected.to_string());

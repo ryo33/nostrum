@@ -1,6 +1,5 @@
-use proc_macro2::TokenStream;
-use quote::quote;
-use syn::visit_mut::VisitMut;
+use proc_macro2::{Group, Span, TokenStream, TokenTree};
+use quote::{quote, ToTokens};
 
 pub(crate) fn generate(target: &syn::Type, input: &syn::ImplItemFn) -> TokenStream {
     let mut args = vec![];
@@ -11,7 +10,7 @@ pub(crate) fn generate(target: &syn::Type, input: &syn::ImplItemFn) -> TokenStre
             .as_ref()
             .map(|(and_token, _lifetime)| and_token);
         let mutability = &receiver.mutability;
-        args.push(quote! { __narrative_state: #reference #mutability #target })
+        args.push(quote! { __nostrumock_state: #reference #mutability #target })
     };
     input.sig.inputs.iter().for_each(|arg| {
         let syn::FnArg::Typed(pat_type) = arg else {
@@ -44,22 +43,36 @@ pub(crate) fn generate(target: &syn::Type, input: &syn::ImplItemFn) -> TokenStre
             quote! { #arrow #ty }
         }
     };
-    let mut block = input.block.clone();
-    SelfReplacer.visit_block_mut(&mut block);
+    let block = input
+        .block
+        .to_token_stream()
+        .into_iter()
+        .map(replace_self)
+        .collect::<TokenStream>();
     quote! {
         |#(#args),*| #output #block
     }
 }
 
-pub struct SelfReplacer;
-
-impl VisitMut for SelfReplacer {
-    fn visit_path_segment_mut(&mut self, i: &mut syn::PathSegment) {
-        if i.ident == "self" {
-            i.ident = syn::Ident::new("__narrative_state", i.ident.span());
+fn replace_self(token: TokenTree) -> TokenTree {
+    match token {
+        TokenTree::Ident(ident) => {
+            if ident == "self" {
+                TokenTree::Ident(syn::Ident::new("__nostrumock_state", Span::call_site()))
+            } else {
+                TokenTree::Ident(ident)
+            }
         }
+        TokenTree::Group(group) => TokenTree::Group(Group::new(
+            group.delimiter(),
+            group.stream().into_iter().map(replace_self).collect(),
+        )),
+        TokenTree::Punct(punct) => TokenTree::Punct(punct),
+        TokenTree::Literal(literal) => TokenTree::Literal(literal),
     }
 }
+
+pub struct SelfReplacer;
 
 #[cfg(test)]
 mod tests {
@@ -78,7 +91,7 @@ mod tests {
         };
         let actual = generate(&target, &input);
         let expected = quote! {
-            |__narrative_state: &Cat| -> String {
+            |__nostrumock_state: &Cat| -> String {
                 "meow".to_string()
             }
         };
@@ -95,8 +108,8 @@ mod tests {
         };
         let actual = generate(&target, &input);
         let expected = quote! {
-            |__narrative_state: &mut Cat| {
-                __narrative_state.name = name;
+            |__nostrumock_state: &mut Cat| {
+                __nostrumock_state.name = name;
             }
         };
         assert_eq!(actual.to_string(), expected.to_string());
@@ -146,7 +159,7 @@ mod tests {
         };
         let actual = generate(&target, &input);
         let expected = quote! {
-            |__narrative_state: &Cat, name: String, count: usize| -> String {
+            |__nostrumock_state: &Cat, name: String, count: usize| -> String {
                 format!("{}: meow {}", name, count)
             }
         };
@@ -161,14 +174,20 @@ mod tests {
                 call(self.name);
                 call(&self.name);
                 self.name();
+                call(self);
+                format!("{}", self);
+                format!("{}", (self, self));
             }
         };
         let actual = generate(&target, &input);
         let expected = quote! {
-            |__narrative_state: &Cat| -> String {
-                call(__narrative_state.name);
-                call(&__narrative_state.name);
-                __narrative_state.name();
+            |__nostrumock_state: &Cat| -> String {
+                call(__nostrumock_state.name);
+                call(&__nostrumock_state.name);
+                __nostrumock_state.name();
+                call(__nostrumock_state);
+                format!("{}", __nostrumock_state);
+                format!("{}", (__nostrumock_state, __nostrumock_state));
             }
         };
         assert_eq!(actual.to_string(), expected.to_string());
@@ -184,8 +203,8 @@ mod tests {
         };
         let actual = generate(&target, &input);
         let expected = quote! {
-            |__narrative_state: &Cat| {
-                call(__narrative_state.name);
+            |__nostrumock_state: &Cat| {
+                call(__nostrumock_state.name);
             }
         };
         assert_eq!(actual.to_string(), expected.to_string());
@@ -201,7 +220,7 @@ mod tests {
         };
         let actual = generate(&target, &input);
         let expected = quote! {
-            |__narrative_state: &Cat, name: &String, count: usize| {
+            |__nostrumock_state: &Cat, name: &String, count: usize| {
                 format!("{}: meow {}", name, count)
             }
         };
@@ -218,7 +237,7 @@ mod tests {
         };
         let actual = generate(&target, &input);
         let expected = quote! {
-            |__narrative_state: &Cat| -> &'static str {
+            |__nostrumock_state: &Cat| -> &'static str {
                 "meow"
             }
         };
@@ -235,7 +254,7 @@ mod tests {
         };
         let actual = generate(&target, &input);
         let expected = quote! {
-            |__narrative_state: Cat| -> String {
+            |__nostrumock_state: Cat| -> String {
                 "meow".to_string()
             }
         };
@@ -252,7 +271,7 @@ mod tests {
         };
         let actual = generate(&target, &input);
         let expected = quote! {
-            |__narrative_state: &Cat| -> &'static str {
+            |__nostrumock_state: &Cat| -> &'static str {
                 "meow"
             }
         };

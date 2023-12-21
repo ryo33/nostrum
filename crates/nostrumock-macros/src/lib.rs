@@ -14,5 +14,13 @@ use proc_macro::TokenStream;
 pub fn mock(attr: TokenStream, item: TokenStream) -> TokenStream {
     let attr = syn::parse_macro_input!(attr as LetMock);
     let input = syn::parse_macro_input!(item as ImplMock);
-    quote::quote! {}.into()
+    let mock_struct = mock_struct::generate(&attr, &input);
+    let impl_trait = impl_trait::generate(&attr, &input);
+    let init_mock = init_mock::generate(&attr, &input);
+    quote::quote! {
+        #mock_struct
+        #impl_trait
+        #init_mock
+    }
+    .into()
 }

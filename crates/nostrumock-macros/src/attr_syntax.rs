@@ -1,7 +1,7 @@
-use proc_macro2::TokenStream;
-use quote::{quote_spanned, ToTokens as _};
+use quote::ToTokens as _;
 use syn::{parse::Parse, Token};
 
+#[allow(dead_code)]
 pub(crate) struct LetMock {
     pub let_token: Token![let],
     pub pat_ident: syn::PatIdent,
