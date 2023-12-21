@@ -1,8 +1,11 @@
+use quote::format_ident;
 use syn::{
-    parse::{Parse, ParseStream, Parser},
+    parse::{Parse, ParseStream},
     spanned::Spanned,
     Token,
 };
+
+use crate::attr_syntax::LetMock;
 
 pub(crate) struct ImplMock {
     pub trait_: syn::Path,
@@ -26,14 +29,6 @@ impl Parse for ImplMock {
 }
 
 impl ImplMock {
-    pub(crate) fn trait_name(&self) -> &syn::Ident {
-        &self
-            .trait_
-            .segments
-            .last()
-            .expect("not empty trait path")
-            .ident
-    }
     pub(crate) fn methods(&self) -> impl Iterator<Item = &syn::ImplItemFn> {
         self.item_impl.items.iter().filter_map(|item| match item {
             syn::ImplItem::Fn(method) => Some(method),
@@ -42,5 +37,14 @@ impl ImplMock {
     }
     pub(crate) fn target(&self) -> &syn::Type {
         self.item_impl.self_ty.as_ref()
+    }
+    pub(crate) fn struct_name(&self, attr: &LetMock) -> syn::Ident {
+        let last = &self
+            .trait_
+            .segments
+            .last()
+            .expect("not empty trait path")
+            .ident;
+        format_ident!("{}__{}", attr.pat_ident.ident, last)
     }
 }

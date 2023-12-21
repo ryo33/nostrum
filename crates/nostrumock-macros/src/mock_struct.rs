@@ -4,10 +4,8 @@ use quote::{format_ident, quote};
 use crate::{attr_syntax::LetMock, impl_syntax::ImplMock};
 
 pub(crate) fn generate(attr: &LetMock, input: &ImplMock) -> TokenStream {
-    let trait_ = input.trait_name();
     let target = input.target();
-    let let_ident = &attr.pat_ident.ident;
-    let ident = format_ident!("{}__{}", let_ident, trait_);
+    let ident = input.struct_name(attr);
     let state_ident = format_ident!("__narrative_state");
     let state_lifetime = quote!('__narrative_state);
     let generics = input.methods().map(|method| {
